@@ -58,6 +58,7 @@ class PlacesViewController: ViewController, UISearchBarDelegate, ArticlePopoverV
 
     fileprivate var previouslySelectedArticlePlaceIdentifier: Int?
     fileprivate var didYouMeanSearch: PlaceSearch?
+    fileprivate var resumeUserActivity: NSUserActivity?
     fileprivate var searching: Bool = false
     // SINGLETONTODO
     fileprivate let imageController = MWKDataStore.shared().cacheController.imageCache
@@ -251,6 +252,10 @@ class PlacesViewController: ViewController, UISearchBarDelegate, ArticlePopoverV
         
         locationManager.startMonitoringLocation()
         mapView.showsUserLocation = true
+        if let resumeUserActivity {
+            processDeepLinkWithCoordinates(userActivity: resumeUserActivity)
+            self.resumeUserActivity = nil
+        }
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -1939,11 +1944,15 @@ class PlacesViewController: ViewController, UISearchBarDelegate, ArticlePopoverV
         currentSearch = nil // will cause the default search to perform after re-centering
         recenterOnUserLocation(self)
     }
-    
-    @objc public func showArticleURL(_ articleURL: URL) {
+
+    // Passed in the userActivity so that I do not have to reccompute the URL components again and minimizing double work and chances of errors
+    @objc public func showArticleURL(_ articleURL: URL, userActivity: NSUserActivity) {
         guard let article = dataStore.fetchArticle(with: articleURL), let title = articleURL.wmf_title,
-            view != nil else { // force view instantiation
-            return
+            view != nil else { // force view instantiation=
+            if view == nil {
+                return resumeUserActivity = userActivity
+            }
+            return processDeepLinkWithCoordinates(userActivity: userActivity)
         }
         let region = self.region(thatFits: [article])
         let displayTitleHTML = article.displayTitleHTML
@@ -1951,7 +1960,18 @@ class PlacesViewController: ViewController, UISearchBarDelegate, ArticlePopoverV
         let searchResult = MWKSearchResult(articleID: 0, revID: 0, title: title, displayTitle: displayTitle, displayTitleHTML: displayTitleHTML, wikidataDescription: article.wikidataDescription, extract: article.snippet, thumbnailURL: article.thumbnailURL, index: nil, titleNamespace: nil, location: article.location)
         currentSearch = PlaceSearch(filter: .top, type: .location, origin: .user, sortStyle: .links, string: nil, region: region, localizedDescription: title, searchResult: searchResult, siteURL: articleURL.wmf_site)
     }
-    
+
+    fileprivate func processDeepLinkWithCoordinates(userActivity: NSUserActivity) {
+        guard view != nil, let userActivity = userActivity.userInfo, let lat = Double(userActivity["lat"] as? String ?? ""),let lon = Double(userActivity["lon"] as? String ?? "") else {
+            return
+        }
+        let coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+        let region = MKCoordinateRegion(center: coordinate, span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05))
+
+        let searchResult = MWKSearchResult(articleID: 0, revID: 0, title: nil, displayTitle: nil, displayTitleHTML: nil, wikidataDescription: nil, extract: nil, thumbnailURL: nil, index: nil, titleNamespace: nil, location: nil)
+        currentSearch = PlaceSearch(filter: .top, type: .location, origin: .system, sortStyle: .links, string: nil, region: region, localizedDescription: nil, searchResult: searchResult, siteURL: nil)
+    }
+
     fileprivate func searchForFirstSearchSuggestion() {
         if !searchSuggestionController.searches[PlaceSearchSuggestionController.completionSection].isEmpty {
             currentSearch = searchSuggestionController.searches[PlaceSearchSuggestionController.completionSection][0]

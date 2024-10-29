@@ -95,6 +95,12 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         
         appViewController.showSplashView()
         var userInfo = userActivity.userInfo
+        let url = userActivity.webpageURL
+        let urlUserInfo = extractUserInfo(from: url)
+        for (key, value) in urlUserInfo {
+            userInfo?[key] = value
+        }
+
         userInfo?[WMFRoutingUserInfoKeys.source] = WMFRoutingUserInfoSourceValue.deepLinkRawValue
         userActivity.userInfo = userInfo
         
@@ -109,9 +115,25 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             } else {
                 appViewController.hideSplashView()
             }
+            
         }
     }
-    
+
+    private func extractUserInfo(from url: URL?) -> [String: Any] {
+        guard let url,
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let queryItems = components.queryItems
+        else { return [:] }
+        var userInfo: [String: Any] = [:]
+
+        for item in queryItems {
+            if let value = item.value {
+                userInfo[item.name] = value
+            }
+        }
+        return userInfo
+    }
+
     func scene(_ scene: UIScene, didFailToContinueUserActivityWithType userActivityType: String, error: any Error) {
         DDLogDebug("didFailToContinueUserActivityWithType: \(userActivityType) error: \(error)")
     }
